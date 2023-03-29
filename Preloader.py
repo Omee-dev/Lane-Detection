@@ -53,26 +53,27 @@ def preprocess_data(images, labels, target_size=(256, 256)):
 
 
 def preprocess_images(images, target_size=(256, 256)):
-    preprocessed_images = np.zeros((len(images), target_size[0], target_size[1], 3))
-    
+    #preprocessed_images = np.zeros((len(images), target_size[0], target_size[1], 3))
+    preprocess_images = []
     for i in range(len(images)):
         print_progress_bar(i,len(images),"preprocess_images")
         img = cv2.resize(images[i], target_size)
         img = img.astype('float32') / 255.0
-        preprocessed_images[i] = img
+        preprocess_images.append(img)
     
-    return preprocessed_images
+    return np.array(preprocess_images)
 
 def create_binary_masks(labels):
     binary_masks = []
     for i,label in enumerate(labels):
         print_progress_bar(i,len(labels),"creating_binary_masks")
-        binary_mask = np.zeros(label.shape[:2], dtype=np.uint8)
+        binary_mask = np.zeros(label.shape[:2], dtype=np.float32)
         coordinates = np.where(label != [0, 0, 0])
         binary_mask[coordinates[0], coordinates[1]] = 1
         binary_masks.append(binary_mask)
     binary_masks = np.array(binary_masks)
     binary_masks = binary_masks.reshape(binary_masks.shape[0], binary_masks.shape[1], binary_masks.shape[2], 1)
+    
     return binary_masks
 
 def split_data(images, labels, test_size=0.2, validation_size=0.2, random_state=42):
@@ -136,9 +137,9 @@ def direct_load(path:str="D:/Data",sample:int=-1):
 
 def augment(x_train, x_val, x_test, y_train, y_val, y_test,batch:int=32):
     train_datagen = ImageDataGenerator(rescale=1./255)
-    gen = train_datagen.flow(x_train, y_train, batch_size=batch, shuffle=False)
+    gen = train_datagen.flow(x_train, y_train, batch_size=batch, shuffle=True)
     val_datagen = ImageDataGenerator(rescale=1./255)
-    val_generator = val_datagen.flow(x_val, y_val, batch_size=batch, shuffle=False)
+    val_generator = val_datagen.flow(x_val, y_val, batch_size=batch, shuffle=True)
     test_datagen = ImageDataGenerator(rescale=1./255)
-    test_generator = test_datagen.flow(x_test, y_test, batch_size=batch, shuffle=False)
+    test_generator = test_datagen.flow(x_test, y_test, batch_size=batch, shuffle=True)
     return gen,val_generator,test_generator
