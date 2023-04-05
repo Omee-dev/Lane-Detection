@@ -5,8 +5,8 @@ import skimage.transform as trans
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Activation,Input,concatenate,Dropout,Conv2DTranspose,UpSampling2D
-from tensorflow.keras.optimizers import *
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Activation,Input,concatenate,Dropout,Conv2DTranspose,UpSampling2D,BatchNormalization
+from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from tensorflow.keras import backend as keras
 
@@ -128,8 +128,35 @@ def Unet1():
 
     model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
 
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
     model.summary()
 
     return model
+
+def yolo_v2_model(input_shape=(256,256,3)):
+    input = Input(input_shape)
+
+    def blocks(x,filters:int,block_no:int,max:int=1):
+        y= Conv2D ( filters,(3,3),strides = (1,1),padding='same',name=f'conv{block_no}_1')(x)
+        y= BatchNormalization(name=f"bnorm{block_no}")(y)
+        y=Activation('relu')(y)
+        if max:
+            y= MaxPooling2D(pool_size=(2,2),name=f"maxpool{block_no}")(y)
+        return y
+
+    x = blocks(input,32,1) #block 1
+    x = blocks(x,64,2)      #block 2
+    x = blocks(x,128,3)     #block 3
+    x = blocks(x,256,4)     #block 4
+    x = blocks(x,512,5)     #block 5
+    x = blocks(x,1024,6,max=0)    #block 6
+
+    x = Conv2D(8,(3,3),strides=(1,1),padding='same',name="output_conv")()
+    output = Flatten(name="output")(x)
+
+    model = tf.keras.Model(inputs=[input], outputs=[output])
+    model.summary()
+    return model
+
+
+
+    
