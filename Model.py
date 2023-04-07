@@ -10,17 +10,68 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from tensorflow.keras import backend as keras
 
-def unet():
+def unet(normal=False):
     input_size = (256,256,3)
+    filters = [64, 128, 256, 512, 1024]
     inputs = Input(input_size)
-    conv1 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
+    def block_down(x,filter,pooling=True,drop=0,normal=False):
+        layer1 = Conv2D(filter, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(x)
+        if normal:
+            layer1 = BatchNormalization()(layer1)
+        layer2 = Conv2D(filter, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
+        if normal:
+            layer2 = BatchNormalization()(layer2)
+        if drop>0.0:
+            dropout = Dropout(0.5)(layer2)            
+            return (MaxPooling2D(pool_size=(2, 2))(dropout),dropout) if pooling else dropout
+        else:
+            pool = MaxPooling2D(pool_size=(2, 2))(layer2)
+            return pool,layer2
+
+    def block_up(x,y,filter,normal=False):
+        up = Conv2D(filter, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(x))
+        merge = concatenate([y,up], axis = 3) 
+        conv = Conv2D(filter, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge)
+        if normal:
+            conv = BatchNormalization()(conv)
+        conv = Conv2D(filter, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge)
+        if normal:
+            conv = BatchNormalization()(conv)
+        return conv
+        
+    x,c1 = block_down(inputs,filters[0],normal=normal)
+    x,c2 = block_down(x,filters[1],normal = normal)
+    x,c3 = block_down(x,filters[2],normal= normal)
+    x,c4 = block_down(x,filters[3],drop=0.5,normal =normal)
+
+    x = block_down(x,filters[4],pooling = False,drop=0.5,normal =normal) #Branch
+
+    x = block_up(x,c4,filters[3],normal=normal) #6
+    x = block_up(x,c4,filters[2],normal=normal) #7
+    x = block_up(x,c4,filters[1],normal=normal) #8
+    x = block_up(x,c4,filters[0],normal=normal) #9
+
+    x = Conv2D(2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(x)
+    if normal:
+        x = BatchNormalization()(x)
+            
+    output = Conv2D(1, 1, activation = 'sigmoid')(x)
+
+            
+    
+
+            
+            
+    #if no_pool==True:
+    
+    '''conv1 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
     conv1 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
     pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
     conv2 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool1)
     conv2 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
     pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
     conv3 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool2)
-    conv3 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv3)
+    conv3 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool2)
     pool3 = MaxPooling2D(pool_size=(2, 2))(conv3)
     conv4 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool3)
     conv4 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv4)
@@ -29,6 +80,7 @@ def unet():
     conv5 = Conv2D(1024, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool4)
     conv5 = Conv2D(1024, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv5)
     drop5 = Dropout(0.5)(conv5)
+    
     up6 = Conv2D(512, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(drop5))
     merge6 = concatenate([drop4,up6], axis = 3)
     conv6 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge6)
@@ -46,8 +98,8 @@ def unet():
     conv9 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
     conv9 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
     conv9 = Conv2D(2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
-    conv10 = Conv2D(1, 1, activation = 'sigmoid')(conv9)
-    model = Model( inputs,conv10)
+    conv10 = Conv2D(1, 1, activation = 'sigmoid')(conv9)'''
+    model = Model( inputs,output)
     #model.compile(optimizer = Adam(learning_rate = 1e-4), loss = 'binary_crossentropy', metrics = ['accuracy'])
     return model
 
@@ -83,7 +135,7 @@ def Unet1():
 
     # Encoder Path
     conv1 = Conv2D(filters[0], (3, 3), activation='relu', padding='same',name="conv1_1")(inputs)
-    conv1 = Conv2D(filters[0], (3, 3), activation='relu', padding='same',name="conv1_1")(conv1)
+    conv1 = Conv2D(filters[0], (3, 3), activation='relu', padding='same',name="conv1_2")(conv1)
     pool1 = MaxPooling2D((2, 2))(conv1)
 
     conv2 = Conv2D(filters[1], (3, 3), activation='relu', padding='same',name="conv2_1")(pool1)
