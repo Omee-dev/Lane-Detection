@@ -114,7 +114,7 @@ def augment_data1(x_train, y_train, batch_size=32):
 
     return train_generator
 
-def print_progress_bar(iteration, total,txt=""):
+'''def print_progress_bar(iteration, total,txt=""):
     length = 40
     iteration += 1
     percent = (100 * iteration) // (total * 99/100)
@@ -124,6 +124,12 @@ def print_progress_bar(iteration, total,txt=""):
 
     if iteration >= total * 99/100:
         print()
+'''
+
+def print_progress_bar(iteration,total,txt=""):    
+    iteration+=1
+    percent=iteration*100//total
+    print("%s%s %d%% %d/%d %s" % ('█'*percent,"-"*(100-percent), percent,iteration,total,txt),end="\r")
 
 def direct_load(path:str="D:/Data",sample:int=-1):
     images,labels,data = load_data(path,sample)

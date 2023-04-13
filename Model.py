@@ -5,22 +5,73 @@ import skimage.transform as trans
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Activation,Input,concatenate,Dropout,Conv2DTranspose,UpSampling2D
-from tensorflow.keras.optimizers import *
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Activation,Input,concatenate,Dropout,Conv2DTranspose,UpSampling2D,BatchNormalization,Flatten
+from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from tensorflow.keras import backend as keras
 
-def unet():
+def unet(normal=False):
     input_size = (256,256,3)
+    filters = [64, 128, 256, 512, 1024]
     inputs = Input(input_size)
-    conv1 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
+    def block_down(x,filter,pooling=True,drop=0,normal=False):
+        layer1 = Conv2D(filter, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(x)
+        if normal:
+            layer1 = BatchNormalization()(layer1)
+        layer2 = Conv2D(filter, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
+        if normal:
+            layer2 = BatchNormalization()(layer2)
+        if drop>0.0:
+            dropout = Dropout(0.5)(layer2)            
+            return (MaxPooling2D(pool_size=(2, 2))(dropout),dropout) if pooling else dropout
+        else:
+            pool = MaxPooling2D(pool_size=(2, 2))(layer2)
+            return pool,layer2
+
+    def block_up(x,y,filter,normal=False):
+        up = Conv2D(filter, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(x))
+        merge = concatenate([y,up], axis = 3) 
+        conv = Conv2D(filter, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge)
+        if normal:
+            conv = BatchNormalization()(conv)
+        conv = Conv2D(filter, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge)
+        if normal:
+            conv = BatchNormalization()(conv)
+        return conv
+        
+    x,c1 = block_down(inputs,filters[0],normal=normal)
+    x,c2 = block_down(x,filters[1],normal = normal)
+    x,c3 = block_down(x,filters[2],normal= normal)
+    x,c4 = block_down(x,filters[3],drop=0.5,normal =normal)
+
+    x = block_down(x,filters[4],pooling = False,drop=0.5,normal =normal) #Branch
+
+    x = block_up(x,c4,filters[3],normal=normal) #6
+    x = block_up(x,c4,filters[2],normal=normal) #7
+    x = block_up(x,c4,filters[1],normal=normal) #8
+    x = block_up(x,c4,filters[0],normal=normal) #9
+
+    x = Conv2D(2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(x)
+    if normal:
+        x = BatchNormalization()(x)
+            
+    output = Conv2D(1, 1, activation = 'sigmoid')(x)
+
+            
+    
+
+            
+            
+    #if no_pool==True:
+    
+    '''conv1 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
     conv1 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
     pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
     conv2 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool1)
     conv2 = Conv2D(128, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
     pool2 = MaxPooling2D(pool_size=(2, 2))(conv2)
     conv3 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool2)
-    conv3 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv3)
+    conv3 = Conv2D(256, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool2)
     pool3 = MaxPooling2D(pool_size=(2, 2))(conv3)
     conv4 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool3)
     conv4 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv4)
@@ -29,6 +80,7 @@ def unet():
     conv5 = Conv2D(1024, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(pool4)
     conv5 = Conv2D(1024, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv5)
     drop5 = Dropout(0.5)(conv5)
+    
     up6 = Conv2D(512, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(drop5))
     merge6 = concatenate([drop4,up6], axis = 3)
     conv6 = Conv2D(512, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge6)
@@ -46,8 +98,8 @@ def unet():
     conv9 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
     conv9 = Conv2D(64, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
     conv9 = Conv2D(2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
-    conv10 = Conv2D(1, 1, activation = 'sigmoid')(conv9)
-    model = Model( inputs,conv10)
+    conv10 = Conv2D(1, 1, activation = 'sigmoid')(conv9)'''
+    model = Model( inputs,output)
     #model.compile(optimizer = Adam(learning_rate = 1e-4), loss = 'binary_crossentropy', metrics = ['accuracy'])
     return model
 
@@ -82,54 +134,81 @@ def Unet1():
     inputs = Input(input_shape)
 
     # Encoder Path
-    conv1 = Conv2D(filters[0], (3, 3), activation='relu', padding='same')(inputs)
-    conv1 = Conv2D(filters[0], (3, 3), activation='relu', padding='same')(conv1)
+    conv1 = Conv2D(filters[0], (3, 3), activation='relu', padding='same',name="conv1_1")(inputs)
+    conv1 = Conv2D(filters[0], (3, 3), activation='relu', padding='same',name="conv1_2")(conv1)
     pool1 = MaxPooling2D((2, 2))(conv1)
 
-    conv2 = Conv2D(filters[1], (3, 3), activation='relu', padding='same')(pool1)
-    conv2 = Conv2D(filters[1], (3, 3), activation='relu', padding='same')(conv2)
+    conv2 = Conv2D(filters[1], (3, 3), activation='relu', padding='same',name="conv2_1")(pool1)
+    conv2 = Conv2D(filters[1], (3, 3), activation='relu', padding='same',name="conv2_2")(conv2)
     pool2 = MaxPooling2D((2, 2))(conv2)
 
-    conv3 = Conv2D(filters[2], (3, 3), activation='relu', padding='same')(pool2)
-    conv3 = Conv2D(filters[2], (3, 3), activation='relu', padding='same')(conv3)
+    conv3 = Conv2D(filters[2], (3, 3), activation='relu', padding='same',name="conv3_1")(pool2)
+    conv3 = Conv2D(filters[2], (3, 3), activation='relu', padding='same',name="conv3_2")(conv3)
     pool3 = MaxPooling2D((2, 2))(conv3)
 
-    conv4 = Conv2D(filters[3], (3, 3), activation='relu', padding='same')(pool3)
-    conv4 = Conv2D(filters[3], (3, 3), activation='relu', padding='same')(conv4)
+    conv4 = Conv2D(filters[3], (3, 3), activation='relu', padding='same',name="conv4_1")(pool3)
+    conv4 = Conv2D(filters[3], (3, 3), activation='relu', padding='same',name="conv4_2")(conv4)
     pool4 = MaxPooling2D((2, 2))(conv4)
 
     # Bottom
-    conv5 = Conv2D(filters[4], (3, 3), activation='relu', padding='same')(pool4)
-    conv5 = Conv2D(filters[4], (3, 3), activation='relu', padding='same')(conv5)
+    conv5 = Conv2D(filters[4], (3, 3), activation='relu', padding='same',name="conv5_1")(pool4)
+    conv5 = Conv2D(filters[4], (3, 3), activation='relu', padding='same',name="conv5_2")(conv5)
 
     # Decoder Path
-    up6 = Conv2DTranspose(filters[3], (2, 2), strides=(2, 2), padding='same')(conv5)
+    up6 = Conv2DTranspose(filters[3], (2, 2), strides=(2, 2), padding='same',name="convt_1")(conv5)
     concat6 = concatenate([up6, conv4])
-    conv6 = Conv2D(filters[3], (3, 3), activation='relu', padding='same')(concat6)
-    conv6 = Conv2D(filters[3], (3, 3), activation='relu', padding='same')(conv6)
+    conv6 = Conv2D(filters[3], (3, 3), activation='relu', padding='same',name="convup1_1")(concat6)
+    conv6 = Conv2D(filters[3], (3, 3), activation='relu', padding='same',name="convup1_2")(conv6)
 
-    up7 = Conv2DTranspose(filters[2], (2, 2), strides=(2, 2), padding='same')(conv6)
+    up7 = Conv2DTranspose(filters[2], (2, 2), strides=(2, 2), padding='same',name="convt_2")(conv6)
     concat7 = concatenate([up7, conv3])
-    conv7 = Conv2D(filters[2], (3, 3), activation='relu', padding='same')(concat7)
-    conv7 = Conv2D(filters[2], (3, 3), activation='relu', padding='same')(conv7)
+    conv7 = Conv2D(filters[2], (3, 3), activation='relu', padding='same',name="convup2_1")(concat7)
+    conv7 = Conv2D(filters[2], (3, 3), activation='relu', padding='same',name="convup2_2")(conv7)
 
-    up8 = Conv2DTranspose(filters[1], (2, 2), strides=(2, 2), padding='same')(conv7)
+    up8 = Conv2DTranspose(filters[1], (2, 2), strides=(2, 2), padding='same',name="convt_3")(conv7)
     concat8 = concatenate([up8, conv2])
-    conv8 = Conv2D(filters[1], (3, 3), activation='relu', padding='same')(concat8)
-    conv8 = Conv2D(filters[1], (3, 3), activation='relu', padding='same')(conv8)
+    conv8 = Conv2D(filters[1], (3, 3), activation='relu', padding='same',name="convup3_1")(concat8)
+    conv8 = Conv2D(filters[1], (3, 3), activation='relu', padding='same',name="convup3_2")(conv8)
 
-    up9 = Conv2DTranspose(filters[0], (2, 2), strides=(2, 2), padding='same')(conv8)
+    up9 = Conv2DTranspose(filters[0], (2, 2), strides=(2, 2), padding='same',name="convt_4")(conv8)
     concat9 = concatenate([up9, conv1])
-    conv9 = Conv2D(filters[0], (3, 3), activation='relu', padding='same')(concat9)
-    conv9 = Conv2D(filters[0], (3, 3), activation='relu', padding='same')(conv9)
+    conv9 = Conv2D(filters[0], (3, 3), activation='relu', padding='same',name="convup4_1")(concat9)
+    conv9 = Conv2D(filters[0], (3, 3), activation='relu', padding='same',name="convup4_2")(conv9)
 
 
     outputs = Conv2D(2, (1, 1), activation='sigmoid')(conv9) #yesorno 1 else 2 for heatmap left r8 lane
 
     model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
 
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
     model.summary()
 
     return model
+
+def yolo_v2_model(input_shape=(256,256,3)):
+    input = Input(input_shape)
+
+    def blocks(x,filters:int,block_no:int,max:int=1):
+        y= Conv2D ( filters,(3,3),strides = (1,1),padding='same',name=f'conv{block_no}_1')(x)
+        y= BatchNormalization(name=f"bnorm{block_no}")(y)
+        y=Activation('relu')(y)
+        if max:
+            y= MaxPooling2D(pool_size=(2,2),name=f"maxpool{block_no}")(y)
+        return y
+
+    x = blocks(input,32,1) #block 1
+    x = blocks(x,64,2)      #block 2
+    x = blocks(x,128,3)     #block 3
+    x = blocks(x,256,4)     #block 4
+    x = blocks(x,512,5)     #block 5
+    x = blocks(x,1024,6,max=0)    #block 6
+
+    x = Conv2D(8,(3,3),strides=(1,1),padding='same',name="output_conv")()
+    output = Flatten(name="output")(x)
+
+    model = tf.keras.Model(inputs=[input], outputs=[output])
+    model.summary()
+    return model
+
+
+
+    
